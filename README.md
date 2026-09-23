@@ -1,11 +1,11 @@
 # Piko - Voice Command Shopping Assistant
 
-[![Deploy Piko to GitHub Pages](https://github.com/Rhythm-Gandhi/unthinkable-VOICE-COMMAND/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/Rhythm-Gandhi/unthinkable-VOICE-COMMAND/actions/workflows/deploy-pages.yml)
-[![Live App](https://img.shields.io/badge/Live%20App-GitHub%20Pages-443025)](https://rhythm-gandhi.github.io/unthinkable-VOICE-COMMAND/)
+[![Deploy Piko to GitHub Pages](https://github.com/Rhythm-Gandhi/PIKO-VOICE-COMMAND/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/Rhythm-Gandhi/PIKO-VOICE-COMMAND/actions/workflows/deploy-pages.yml)
+[![Live App](https://img.shields.io/badge/Live%20App-GitHub%20Pages-443025)](https://rhythm-gandhi.github.io/PIKO-VOICE-COMMAND/)
 
 Piko is a mobile-first, local-first shopping assistant that understands natural voice and typed grocery requests in English and major Indian languages. It manages quantities, prices, history, and explainable recommendations without a backend, account, database, API key, or external AI service.
 
-**Live application:** [rhythm-gandhi.github.io/unthinkable-VOICE-COMMAND](https://rhythm-gandhi.github.io/unthinkable-VOICE-COMMAND/)
+**Live application:** [rhythm-gandhi.github.io/PIKO-VOICE-COMMAND](https://rhythm-gandhi.github.io/PIKO-VOICE-COMMAND/)
 
 ## Problem statement
 
@@ -352,8 +352,8 @@ Undo.
 ### Install and run
 
 ```bash
-git clone https://github.com/Rhythm-Gandhi/unthinkable-VOICE-COMMAND.git
-cd unthinkable-VOICE-COMMAND
+git clone https://github.com/Rhythm-Gandhi/PIKO-VOICE-COMMAND.git
+cd PIKO-VOICE-COMMAND
 npm install
 npm run dev
 ```
@@ -377,13 +377,13 @@ npm run build
 | `npm run typecheck` | Run the TypeScript compiler |
 | `npm run build` | Type-check and build production assets |
 
-The current verified project contains **331 automated tests**.
+The current verified project contains **416 automated tests**.
 
 ## Deployment
 
 Piko is hosted at:
 
-**https://rhythm-gandhi.github.io/unthinkable-VOICE-COMMAND/**
+**https://rhythm-gandhi.github.io/PIKO-VOICE-COMMAND/**
 
 Pushes to `main` trigger `.github/workflows/deploy-pages.yml`:
 
@@ -402,7 +402,7 @@ flowchart LR
 The workflow uses Node.js 22 and the official GitHub Pages actions. Vite uses:
 
 ```ts
-base: "/unthinkable-VOICE-COMMAND/"
+base: "/PIKO-VOICE-COMMAND/"
 ```
 
 `dist/` is generated during deployment and is not committed. No deployment secret or environment file is required.
