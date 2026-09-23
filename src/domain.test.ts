@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { catalog, categorize } from "./data";
-import { applyCartCommand, defaultData, isParsedCommand, itemSubtotalPaise, loadData, makeItem, mergeItem, normalizeItem, normalizeTranscript, parseCommand, parseItems, rankSubstitutes, recommendProducts, searchProducts, serializeData, suggestions } from "./domain";
+import { applyCartCommand, defaultData, isParsedCommand, itemSubtotalPaise, loadData, localizedResponse, makeItem, mergeItem, normalizeItem, normalizeTranscript, parseCommand, parseItems, rankSubstitutes, recommendProducts, searchProducts, serializeData, suggestions } from "./domain";
 import { chooseBestTranscript, evaluateAlternatives, recognitionEndMessage, shouldExecuteFinal } from "./voice";
 import type { AppData, HistoryItem } from "./types";
 
@@ -23,6 +23,7 @@ describe("intent parsing",()=>{
   it("understands whole removal without a strict remove verb",()=>expect(parseCommand("अब दूध नहीं चाहिए")).toMatchObject({intent:"REMOVE_ALL",normalizedItem:"milk"}));
   it("flags noise as ambiguous",()=>expect(parseCommand("add 5x").confidence).toBeLessThan(.6));
   it("never treats an unmatched question as add",()=>expect(parseCommand("Is milk good for children?").intent).toBe("UNKNOWN"));
+  it("recognizes grammatical quantity-question variants",()=>expect(parseCommand("انڈے کتنے ہیں؟")).toMatchObject({intent:"QUERY_QUANTITY",normalizedItem:"egg"}));
 });
 
 describe("code-switched parsing regressions",()=>{
@@ -113,7 +114,7 @@ const languageCases=[
   ["English","I need one kilo atta","Remove two packets of milk","How much milk do I have","Tell me my entire list","I'm hungry"],
   ["Hinglish","atta chahiye ek kilo","Milk ke do packet kam kar do","Milk kitna hai","Meri list mein kya hai","Kuch khane ko batao"],
   ["Hindi","एक किलो आटा चाहिए","दो पैकेट दूध हटाओ","दूध कितना है","मेरी पूरी सूची बताओ","आज क्या खाऊं"],
-  ["Bengali","এক কিলো আটা চাই","দুই প্যাকেট দুধ সরাও","দুধ কত","আমার তালিকা বলো","আমি ক্ষুধার্ত"],
+  ["Bengali","এক কিলো আটা চাই","দুই প্যাকেট দুধ সরাও","দুধ কত","আমার পুরো তালিকা বলো","আমি ক্ষুধার্ত"],
   ["Marathi","एक किलो आटा चाहिए","दो पैकेट दूध हटाओ","दूध कितना","मेरी पूरी लिस्ट बताओ","मी भुकेला आहे सुचवा"],
   ["Gujarati","એક કિલો પીંઠ જોઈએ","બે પેકેટ દૂધ કાઢ","દૂધ કેટલું","મારી યાદી બતાવો","મને ભૂખ લાગી"],
   ["Punjabi","ਇੱਕ ਕਿਲੋ ਆਟਾ ਚਾਹੀਦਾ","ਦੋ ਪੈਕੇਟ ਦੁੱਧ ਹਟਾਓ","ਦੁੱਧ ਕਿੰਨਾ","ਮੇਰੀ ਸੂਚੀ ਦੱਸੋ","ਮੈਨੂੰ ਭੁੱਖ ਲੱਗੀ"],
@@ -137,7 +138,7 @@ describe("existing domain and persistence behavior",()=>{
   it("derives approximate fallback prices from the catalog instead of a fixed ₹50",()=>{const item=makeItem("dragon fruit");expect(item.approximatePrice).toBe(true);expect(item.estimatedUnitPricePaise).toBeGreaterThan(0);expect(item.estimatedUnitPricePaise).not.toBe(5000)});
   it("prorates catalog packs to the requested measurement",()=>expect(makeItem("Atta",1,"kg","text",catalog.find(p=>p.id==="aashirvaad-atta")).estimatedUnitPricePaise).toBe(5700));
   it("updates compatible cart measurements and prorates their market estimate",()=>{let list=mergeItem([],makeItem("Almonds",250,"g"));list=mergeItem(list,makeItem("Almonds",.5,"kg"));expect(list[0]).toMatchObject({quantity:750,unit:"g"});expect(itemSubtotalPaise(list[0])).toBe(Math.round(list[0].estimatedUnitPricePaise!*750))});
-  it("prices half a dozen eggs as six pieces",()=>{const eggs=makeItem("Eggs",.5,"dozen","text",catalog.find(p=>p.id==="farm-eggs"));expect(eggs.estimatedUnitPricePaise).toBe(14400);expect(itemSubtotalPaise(eggs)).toBe(7200)});
+  it("prices half a dozen eggs as six pieces",()=>{const eggs=makeItem("Eggs",.5,"dozen","text",catalog.find(p=>p.id==="farm-eggs"));expect(eggs).toMatchObject({quantity:6,unit:"piece",estimatedUnitPricePaise:1200});expect(itemSubtotalPaise(eggs)).toBe(7200)});
   it("scales a generic food estimate with the requested quantity",()=>{const small=makeItem("Quinoa",250,"g"),large=makeItem("Quinoa",500,"g");expect(small.approximatePrice).toBe(true);expect(small.estimatedUnitPricePaise).toBeGreaterThan(0);expect(itemSubtotalPaise(large)).toBe(itemSubtotalPaise(small)*2)});
   it("recommends within constraints",()=>expect(recommendProducts(parseCommand("Recommend fruits under ₹200")).every(x=>x.price<=200&&x.tags.includes("fruit"))).toBe(true));
   it("builds history and seasonal suggestions",()=>{const now=new Date("2026-08-24T00:00:00Z"),h={...makeItem("bread"),purchasedAt:"2026-08-10T00:00:00Z"} as HistoryItem;expect(suggestions({...defaultData,history:[h,{...h,id:crypto.randomUUID(),purchasedAt:"2026-08-17T00:00:00Z"}]},8,now).some(x=>x.kind==="history")).toBe(true);expect(suggestions(defaultData,5,now).some(x=>x.kind==="seasonal")).toBe(true)});
@@ -244,4 +245,70 @@ describe("open catalog fallback",()=>{
     expect(parseCommand("Find yoga mat")).toMatchObject({intent:"SEARCH_PRODUCT",normalizedItem:"yoga mat"});
     expect(parseCommand("What is the price of yoga mat?")).toMatchObject({intent:"PRICE_QUERY",normalizedItem:"yoga mat"});
   });
+});
+
+const multilingualParityMatrix=[
+  ["English","I need milk","Buy 5 oranges","Add one dozen eggs","Add two dozen bananas","Remove two packets of milk","How much milk do I have?","What is on my list?","Find toothpaste","Recommend something healthy","What is my cart total?"],
+  ["Hinglish","Doodh chahiye","Paanch santre chahiye","Ek darjan ande chahiye","Do darjan kele chahiye","Do packet doodh hatao","Milk kitna hai?","Meri list mein kya hai?","Toothpaste dikhao","Kuch healthy suggest karo","Mera total kitna hai?"],
+  ["Hindi","दूध चाहिए","५ संतरे चाहिए","एक दर्जन अंडे चाहिए","दो दर्जन केले चाहिए","दो पैकेट दूध हटाओ","दूध कितना है?","मेरी पूरी सूची बताओ","टूथपेस्ट दिखाओ","कुछ स्वस्थ सुझाओ","मेरा कुल कितना है?"],
+  ["Bengali","দুধ চাই","৫ কমলা চাই","এক ডজন ডিম চাই","দুই ডজন কলা চাই","দুই প্যাকেট দুধ সরাও","দুধ কত আছে?","আমার তালিকা বলো","টুথপেস্ট দেখাও","স্বাস্থ্যকর কিছু সুপারিশ করো","আমার মোট কত?"],
+  ["Marathi","दूध पाहिजे","५ संत्री पाहिजेत","एक डझन अंडी द्या","दोन डझन केळी द्या","दोन पॅकेट दूध कमी करा","दूध किती आहे?","माझी यादी सांगा","टूथपेस्ट दाखवा","काही आरोग्यदायी सुचवा","माझे एकूण किती?"],
+  ["Gujarati","દૂધ જોઈએ","૫ નારંગી જોઈએ","એક ડઝન ઇંડા જોઈએ","બે ડઝન કેળા જોઈએ","બે પેકેટ દૂધ કાઢો","દૂધ કેટલું છે?","મારી યાદી બતાવો","ટૂથપેસ્ટ બતાવો","કંઈક સ્વસ્થ સૂચવો","મારું કુલ કેટલું?"],
+  ["Punjabi","ਦੁੱਧ ਚਾਹੀਦਾ","੫ ਸੰਤਰੇ ਚਾਹੀਦੇ","ਇੱਕ ਦਰਜਨ ਅੰਡੇ ਚਾਹੀਦੇ","ਦੋ ਦਰਜਨ ਕੇਲੇ ਚਾਹੀਦੇ","ਦੋ ਪੈਕੇਟ ਦੁੱਧ ਹਟਾਓ","ਦੁੱਧ ਕਿੰਨਾ ਹੈ?","ਮੇਰੀ ਸੂਚੀ ਦੱਸੋ","ਟੂਥਪੇਸਟ ਦਿਖਾਓ","ਕੁਝ ਸਿਹਤਮੰਦ ਸੁਝਾਓ","ਮੇਰਾ ਕੁੱਲ ਕਿੰਨਾ ਹੈ?"],
+  ["Tamil","பால் வேண்டும்","௫ ஆரஞ்சு வேண்டும்","ஒரு டஜன் முட்டை வேண்டும்","இரண்டு டஜன் வாழைப்பழம் வேண்டும்","இரண்டு பாக்கெட் பால் நீக்கு","பால் எவ்வளவு உள்ளது?","என் பட்டியல் சொல்லு","டூத் பேஸ்ட் காட்டு","ஆரோக்கியமானதை பரிந்துரை","என் மொத்தம் எவ்வளவு?"],
+  ["Telugu","పాలు కావాలి","౫ నారింజలు కావాలి","ఒక డజను గుడ్లు కావాలి","రెండు డజను అరటిపండ్లు కావాలి","రెండు ప్యాకెట్ పాలు తొలగించు","పాలు ఎంత ఉన్నాయి?","నా జాబితా చెప్పు","టూత్ పేస్ట్ చూపించు","ఆరోగ్యకరమైనది సూచించు","నా మొత్తం ఎంత?"],
+  ["Kannada","ಹಾಲು ಬೇಕು","೫ ಕಿತ್ತಳೆ ಬೇಕು","ಒಂದು ಡಜನ್ ಮೊಟ್ಟೆ ಬೇಕು","ಎರಡು ಡಜನ್ ಬಾಳೆಹಣ್ಣು ಬೇಕು","ಎರಡು ಪ್ಯಾಕೆಟ್ ಹಾಲು ತೆಗೆ","ಹಾಲು ಎಷ್ಟು ಇದೆ?","ನನ್ನ ಪಟ್ಟಿ ಹೇಳು","ಟೂತ್ ಬ್ರಷ್ ಹುಡುಕು","ಆರೋಗ್ಯಕರವಾದುದನ್ನು ಸೂಚಿಸಿ","ನನ್ನ ಒಟ್ಟು ಎಷ್ಟು?"],
+  ["Malayalam","പാൽ വേണം","൫ ഓറഞ്ച് വേണം","ഒരു ഡസൻ മുട്ട വേണം","രണ്ട് ഡസൻ വാഴപ്പഴം വേണം","രണ്ട് പാക്കറ്റ് പാൽ നീക്കൂ","പാൽ എത്രയുണ്ട്?","എന്റെ പട്ടിക പറയൂ","ടൂത്ത് പേസ്റ്റ് കാണിക്കുക","ആരോഗ്യകരമായത് നിർദ്ദേശിക്കുക","എന്റെ ആകെ എത്ര?"],
+  ["Urdu","دودھ چاہیے","۵ سنترے چاہیے","ایک درجن انڈے چاہیے","دو درجن کیلے چاہیے","دو پیکٹ دودھ ہٹا دو","دودھ کتنا ہے؟","میری فہرست بتاؤ","ٹوتھ پیسٹ دکھاؤ","کچھ صحت مند تجویز کرو","میرا کل کتنا ہے؟"]
+] as const;
+
+describe.each(multilingualParityMatrix)("%s complete intent parity",(_language,add,numbered,dozen,twoDozen,remove,quantity,list,search,recommend,total)=>{
+  it("uses the shared parser and cart rules",()=>{
+    expect(parseCommand(add)).toMatchObject({intent:"ADD_ITEM",normalizedItem:"milk"});
+    expect(parseCommand(numbered)).toMatchObject({intent:"ADD_ITEM",normalizedItem:"orange",quantity:5});
+    const dozenCommand=parseCommand(dozen),dozenProduct=catalog.find(product=>product.normalizedName===dozenCommand.normalizedItem)!;
+    expect(makeItem(dozenProduct.name,dozenCommand.quantity,dozenCommand.unit,"text",dozenProduct)).toMatchObject({normalizedName:"egg",quantity:12,unit:"piece"});
+    const twoDozenCommand=parseCommand(twoDozen),twoDozenProduct=catalog.find(product=>product.normalizedName===twoDozenCommand.normalizedItem)!;
+    expect(makeItem(twoDozenProduct.name,twoDozenCommand.quantity,twoDozenCommand.unit,"text",twoDozenProduct)).toMatchObject({normalizedName:"banana",quantity:24,unit:"piece"});
+    const milk=[makeItem("Milk",5,"packet")],removed=applyCartCommand(milk,parseCommand(remove));expect(removed).toMatchObject({changed:true,list:[{quantity:3}]});
+    const before=JSON.stringify(milk),quantityResult=applyCartCommand(milk,parseCommand(quantity));expect(parseCommand(quantity).intent).toBe("QUERY_QUANTITY");expect(quantityResult.changed).toBe(false);expect(JSON.stringify(quantityResult.list)).toBe(before);
+    expect(parseCommand(list).intent).toBe("QUERY_LIST");
+    expect(parseCommand(search)).toMatchObject({intent:"SEARCH_PRODUCT"});
+    expect(parseCommand(recommend).intent).toBe("RECOMMEND_PRODUCTS");
+    expect(parseCommand(total).intent).toBe("CART_TOTAL");
+  });
+});
+
+describe("multilingual number-word ranges",()=>{
+  it.each([
+    ["English","eleven","twenty five","ninety"],["Hinglish","gyarah","pachees","nabbe"],["Hindi","ग्यारह","पच्चीस","नब्बे"],["Bengali","এগারো","পঁচিশ","নব্বই"],
+    ["Marathi","अकरा","पंचवीस","नव्वद"],["Gujarati","અગિયાર","પચ્ચીસ","નેવું"],["Punjabi","ਗਿਆਰਾਂ","ਪੱਚੀ","ਨੱਬੇ"],["Tamil","பதினொன்று","இருபத்தைந்து","தொண்ணூறு"],
+    ["Telugu","పదకొండు","ఇరవైఐదు","తొంభై"],["Kannada","ಹನ್ನೊಂದು","ಇಪ್ಪತ್ತೈದು","ತೊಂಬತ್ತು"],["Malayalam","പതിനൊന്ന്","ഇരുപത്തഞ്ച്","തൊണ്ണൂറ്"],["Urdu","گیارہ","پچیس","نوے"]
+  ])("normalizes teens, compounds, and tens in %s",(_language,eleven,twentyFive,ninety)=>{expect(normalizeTranscript(`${eleven} orange`)).toBe("11 orange");expect(normalizeTranscript(`${twentyFive} orange`)).toBe("25 orange");expect(normalizeTranscript(`${ninety} orange`)).toBe("90 orange")});
+});
+
+describe("safe dozen and conversational context",()=>{
+  it("merges dozen and piece additions into one piece-based entry",()=>{const eggs=catalog.find(product=>product.normalizedName==="egg")!;let list=mergeItem([],makeItem(eggs.name,1,"dozen","text",eggs));list=mergeItem(list,makeItem(eggs.name,6,"piece","text",eggs));expect(list).toMatchObject([{normalizedName:"egg",quantity:18,unit:"piece"}])});
+  it("subtracts half a dozen from a piece-based entry",()=>{const eggs=catalog.find(product=>product.normalizedName==="egg")!,list=[makeItem(eggs.name,18,"piece","text",eggs)],result=applyCartCommand(list,parseCommand("Remove half a dozen eggs"));expect(result).toMatchObject({changed:true,list:[{quantity:12,unit:"piece"}]})});
+  it("requires clarification for dozen on a non-piece product or an unspecified plural",()=>{expect(parseCommand("Add one dozen milk")).toMatchObject({intent:"ADD_ITEM",needsConfirmation:true,confidence:.55});expect(parseCommand("Add dozens of eggs")).toMatchObject({intent:"ADD_ITEM",needsConfirmation:true,confidence:.55})});
+  it.each([["Add two more","ADD_ITEM",2],["Reduce it by one","REMOVE_QUANTITY",1],["Set it to three","SET_QUANTITY",3]])("uses recent-item context for %s",(text,intent,quantity)=>expect(parseCommand(text)).toMatchObject({intent,normalizedItem:"it",quantity}));
+});
+
+const multilingualMutationMatrix=[
+  ["English","Make milk three packets","Add two more packets of milk","Remove milk"],["Hinglish","Milk teen packet kar do","Milk ke do packet aur","Doodh nahi chahiye"],["Hindi","दूध तीन पैकेट कर दो","दूध दो पैकेट और","दूध नहीं चाहिए"],
+  ["Bengali","দুধ তিন প্যাকেট করো","দুধ দুই প্যাকেট আরও","দুধ বাদ দাও"],["Marathi","दूध तीन पॅकेट करा","दूध दोन पॅकेट वाढवा","दूध काढून टाका"],["Gujarati","દૂધ ત્રણ પેકેટ કરી દો","દૂધ બે પેકેટ વધારો","દૂધ કાઢો"],
+  ["Punjabi","ਦੁੱਧ ਤਿੰਨ ਪੈਕੇਟ ਕਰ ਦਿਓ","ਦੁੱਧ ਦੋ ਪੈਕੇਟ ਹੋਰ","ਦੁੱਧ ਕੱਢ ਦਿਓ"],["Tamil","பால் மூன்று பாக்கெட் ஆக்கு","பால் இரண்டு பாக்கெட் மேலும்","பால் எடுத்து விடு"],["Telugu","పాలు మూడు ప్యాకెట్ చేయి","పాలు రెండు ప్యాకెట్ ఇంకా","పాలు తీసివేయి"],
+  ["Kannada","ಹಾಲು ಮೂರು ಪ್ಯಾಕೆಟ್ ಮಾಡಿ","ಹಾಲು ಎರಡು ಪ್ಯಾಕೆಟ್ ಇನ್ನಷ್ಟು","ಹಾಲು ತೆಗೆದುಹಾಕು"],["Malayalam","പാൽ മൂന്ന് പാക്കറ്റ് ആക്കൂ","പാൽ രണ്ട് പാക്കറ്റ് കൂടി","പാൽ എടുത്തുകളയൂ"],["Urdu","دودھ تین پیکٹ کر دو","دودھ دو پیکٹ مزید","دودھ نکال دو"]
+] as const;
+describe.each(multilingualMutationMatrix)("%s quantity mutation parity",(_language,set,increase,removeAll)=>{
+  it("distinguishes set, increase, and whole removal",()=>{expect(parseCommand(set)).toMatchObject({intent:"SET_QUANTITY",normalizedItem:"milk",quantity:3});expect(parseCommand(increase)).toMatchObject({intent:"ADD_ITEM",normalizedItem:"milk",quantity:2});expect(parseCommand(removeAll)).toMatchObject({intent:"REMOVE_ALL",normalizedItem:"milk"})});
+});
+
+describe("required multilingual grocery aliases",()=>{
+  it.each(["water","पानी","পানি","પાણી","ਪਾਣੀ","தண்ணீர்","నీరు","ನೀರು","വെള്ളം","پانی"])("maps %s to water",word=>expect(normalizeItem(word)).toBe("water"));
+  it.each(["मुझे दो किलो टमाटर चाहिए","দুই কিলো টমেটো চাই","दोन किलो टोमॅटो पाहिजे","બે કિલો ટામેટા જોઈએ","ਦੋ ਕਿਲੋ ਟਮਾਟਰ ਚਾਹੀਦੇ","இரண்டு கிலோ தக்காளி வேண்டும்","రెండు కిలోల టమాటాలు కావాలి","ಎರಡು ಕಿಲೋ ಟೊಮೆಟೊ ಬೇಕು","രണ്ട് കിലോ തക്കാളി വേണം","دو کلو ٹماٹر چاہیے"])("canonicalizes tomato in %s",text=>expect(parseCommand(text)).toMatchObject({intent:"ADD_ITEM",normalizedItem:"tomato",quantity:2,unit:"kg"}));
+});
+
+describe("localized core responses",()=>{
+  it.each(["hi","bn","mr","gu","pa","ta","te","kn","ml","ur"])("does not fall back to English for %s",language=>expect(localizedResponse(language,"empty")).not.toBe(localizedResponse("en","empty")));
 });

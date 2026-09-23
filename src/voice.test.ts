@@ -21,6 +21,8 @@ describe("speech recognition lifecycle",()=>{
     expect(resolveRecognitionLocale("ta-IN","en-US")).toBe("ta-IN");
   });
 
+  it.each(["en-IN","hi-IN","bn-IN","mr-IN","gu-IN","pa-IN","ta-IN","te-IN","kn-IN","ml-IN","ur-IN"])("keeps %s as a valid manual recognition locale",locale=>expect(resolveRecognitionLocale(locale,"en-US")).toBe(locale));
+
   it("starts its timeout only after the browser starts listening",()=>{
     const errors:string[]=[];
     createRecognition("en-IN",{onState:vi.fn(),onTranscript:vi.fn(),onError:text=>errors.push(text)},20);
